@@ -25,10 +25,19 @@ from typing import Dict, List, Optional, Tuple, Generator
 from dataclasses import dataclass, field
 from tqdm import tqdm
 
-from .tracking.occlusion_robust_tracker import (
-    OcclusionRobustTracker, TrackerConfig, FrameResult
-)
-from .tracking.enhanced_track import EnhancedTrack
+# Support both installation styles:
+# - top-level usage: `from core.pipeline import ...`
+# - package usage:   `from hockey_mcbyte_tracker.core...`
+try:
+    from ..tracking.occlusion_robust_tracker import (
+        OcclusionRobustTracker, TrackerConfig, FrameResult
+    )
+    from ..tracking.enhanced_track import EnhancedTrack
+except ImportError:  # pragma: no cover
+    from tracking.occlusion_robust_tracker import (
+        OcclusionRobustTracker, TrackerConfig, FrameResult
+    )
+    from tracking.enhanced_track import EnhancedTrack
 from .detectors.yolo_detector import UltralyticsYOLODetector
 from .utils.visualization import Visualizer, HOCKEY_CLASS_COLORS
 
