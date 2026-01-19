@@ -318,7 +318,13 @@ class UltimateHockeyTracker:
         self.mask_system = None
         if self.config.use_masks:
             try:
-                from ..mask_propagation.sam_cutie_system import MaskIdentitySystem
+                # Support importing as either:
+                # - top-level module: `from tracking...` (repo root on PYTHONPATH)
+                # - package module: `from hockey_mcbyte_tracker.tracking...`
+                try:
+                    from ..mask_propagation.sam_cutie_system import MaskIdentitySystem
+                except ImportError:  # pragma: no cover
+                    from mask_propagation.sam_cutie_system import MaskIdentitySystem
                 self.mask_system = MaskIdentitySystem(
                     sam_checkpoint=self.config.sam_checkpoint,
                     cutie_checkpoint=self.config.cutie_checkpoint,

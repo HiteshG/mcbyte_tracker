@@ -25,9 +25,17 @@ from .enhanced_track import (
     iou_batch, linear_assignment, fuse_motion_appearance
 )
 from .appearance import AppearanceExtractor, AppearanceFeature
-from ..mask_propagation.integrated_masks import (
-    MaskPropagationSystem, MaskIdentityVerifier, PropagationResult
-)
+# Support importing as either:
+# - top-level module: `from tracking...` (repo root on PYTHONPATH)
+# - package module: `from hockey_mcbyte_tracker.tracking...`
+try:
+    from ..mask_propagation.integrated_masks import (
+        MaskPropagationSystem, MaskIdentityVerifier, PropagationResult
+    )
+except ImportError:  # pragma: no cover
+    from mask_propagation.integrated_masks import (
+        MaskPropagationSystem, MaskIdentityVerifier, PropagationResult
+    )
 
 
 @dataclass
