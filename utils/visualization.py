@@ -10,7 +10,18 @@ from typing import List, Dict, Optional, Tuple
 from collections import defaultdict
 
 
-# Color palette for visualization (BGR format)
+# Hockey class-specific colors (BGR format) - distinct and visible
+HOCKEY_CLASS_COLORS = {
+    0: (128, 128, 128),  # Center Ice - Gray (usually not tracked)
+    1: (180, 180, 180),  # Faceoff - Light Gray (usually not tracked)
+    2: (0, 165, 255),    # Goalpost - Orange (usually not tracked)
+    3: (0, 0, 255),      # Goaltender - RED (bright, distinct)
+    4: (255, 255, 0),    # Player - CYAN (bright, easy to see)
+    5: (0, 255, 255),    # Puck - YELLOW (stands out against ice)
+    6: (0, 255, 0),      # Referee - GREEN (officials)
+}
+
+# Default color palette for track IDs (when no class color is defined)
 PALETTE = [
     (255, 128, 0),    # 0: Orange
     (0, 255, 0),      # 1: Green
@@ -37,6 +48,7 @@ class Visualizer:
     Tracking visualization manager.
     
     Handles drawing of bounding boxes, IDs, trajectories, and masks.
+    Uses distinct colors per class for hockey tracking.
     """
     
     def __init__(
@@ -48,6 +60,7 @@ class Visualizer:
         trajectory_length: int = 30,
         class_colors: Optional[Dict[int, Tuple[int, int, int]]] = None,
         class_names: Optional[Dict[int, str]] = None,
+        use_hockey_colors: bool = True,
     ):
         """
         Initialize visualizer.
@@ -60,14 +73,35 @@ class Visualizer:
             trajectory_length: Max trajectory points
             class_colors: Custom colors per class (BGR)
             class_names: Class ID to name mapping
+            use_hockey_colors: Use predefined hockey class colors
         """
         self.show_boxes = show_boxes
         self.show_ids = show_ids
         self.show_masks = show_masks
         self.show_trajectories = show_trajectories
         self.trajectory_length = trajectory_length
-        self.class_colors = class_colors or {}
-        self.class_names = class_names or {}
+        
+        # Use hockey colors by default, but allow override
+        if class_colors is not None:
+            self.class_colors = class_colors
+        elif use_hockey_colors:
+            self.class_colors = HOCKEY_CLASS_COLORS.copy()
+        else:
+            self.class_colors = {}
+        
+        # Default hockey class names if not provided
+        if class_names is not None:
+            self.class_names = class_names
+        else:
+            self.class_names = {
+                0: "Ice",
+                1: "Faceoff",
+                2: "Goal",
+                3: "Goalie",
+                4: "Player",
+                5: "Puck",
+                6: "Ref"
+            }
         
         # Track history for trajectories
         self.track_histories: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
@@ -125,16 +159,18 @@ class Visualizer:
         track,
         color: Tuple[int, int, int]
     ) -> np.ndarray:
-        """Draw bounding box."""
+        """Draw bounding box with class-specific styling."""
         tlbr = track.tlbr.astype(int)
         x1, y1, x2, y2 = tlbr
         
-        # Draw box with thickness based on confidence
-        thickness = 2
-        if hasattr(track, 'score'):
-            thickness = max(1, int(track.score * 4))
+        # Thicker boxes for better visibility
+        thickness = 3
         
+        # Draw filled rectangle border for better visibility on ice
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+        
+        # Add subtle inner line for contrast
+        cv2.rectangle(frame, (x1+1, y1+1), (x2-1, y2-1), (0, 0, 0), 1)
         
         return frame
     
@@ -144,35 +180,67 @@ class Visualizer:
         track,
         color: Tuple[int, int, int]
     ) -> np.ndarray:
-        """Draw track ID label."""
+        """Draw track ID label with high visibility."""
         tlbr = track.tlbr.astype(int)
-        x1, y1 = tlbr[:2]
+        x1, y1, x2, y2 = tlbr
         
-        # Build label
-        label = f"ID:{track.track_id}"
+        # Get class name (short version for label)
+        class_name = ""
         if hasattr(track, 'class_id'):
             class_name = self.class_names.get(track.class_id, "")
-            if class_name:
-                label = f"{class_name} {label}"
         
-        if hasattr(track, 'score'):
-            label += f" {track.score:.2f}"
+        # Build label with Track ID prominently displayed
+        track_id = track.track_id
+        if class_name:
+            label = f"{class_name} #{track_id}"
+        else:
+            label = f"#{track_id}"
+        
+        # Font settings for visibility
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.7  # Larger font
+        thickness = 2     # Bolder text
         
         # Calculate label size
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.5
-        thickness = 1
-        (w, h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+        (text_w, text_h), baseline = cv2.getTextSize(label, font, font_scale, thickness)
         
-        # Draw label background
-        y1_label = max(y1 - h - 10, 0)
-        cv2.rectangle(frame, (x1, y1_label), (x1 + w, y1_label + h + 8), color, -1)
+        # Position label above box
+        label_y = max(y1 - 8, text_h + 8)
+        label_x = x1
         
-        # Draw text
+        # Draw dark background with padding for contrast
+        padding = 4
+        bg_x1 = label_x - padding
+        bg_y1 = label_y - text_h - padding
+        bg_x2 = label_x + text_w + padding
+        bg_y2 = label_y + padding
+        
+        # Draw background (dark semi-transparent rectangle)
+        cv2.rectangle(frame, (bg_x1, bg_y1), (bg_x2, bg_y2), (0, 0, 0), -1)
+        
+        # Draw colored border around background
+        cv2.rectangle(frame, (bg_x1, bg_y1), (bg_x2, bg_y2), color, 2)
+        
+        # Draw text in white for maximum contrast
         cv2.putText(
-            frame, label, (x1, y1_label + h + 4),
+            frame, label, (label_x, label_y),
             font, font_scale, (255, 255, 255), thickness
         )
+        
+        # Optionally draw score below the box
+        if hasattr(track, 'score') and track.score > 0:
+            score_label = f"{track.score:.2f}"
+            score_font_scale = 0.5
+            (sw, sh), _ = cv2.getTextSize(score_label, font, score_font_scale, 1)
+            score_x = x1
+            score_y = y2 + sh + 5
+            
+            # Background for score
+            cv2.rectangle(frame, (score_x-2, y2+2), (score_x+sw+2, score_y+2), (0, 0, 0), -1)
+            cv2.putText(
+                frame, score_label, (score_x, score_y),
+                font, score_font_scale, color, 1
+            )
         
         return frame
     
@@ -181,7 +249,7 @@ class Visualizer:
         frame: np.ndarray,
         tracks: List
     ) -> np.ndarray:
-        """Draw track trajectories."""
+        """Draw track trajectories with gradient effect."""
         for track in tracks:
             # Update history
             center = track.xywh[:2].astype(int)
@@ -198,8 +266,13 @@ class Visualizer:
                 continue
             
             color = self._get_track_color(track)
-            pts = np.array(history, dtype=np.int32).reshape((-1, 1, 2))
-            cv2.polylines(frame, [pts], False, color, 2)
+            
+            # Draw with gradient (older points are more transparent)
+            pts = np.array(history, dtype=np.int32)
+            for i in range(len(pts) - 1):
+                # Calculate alpha based on position (older = thinner)
+                thickness = max(1, int(3 * (i + 1) / len(pts)))
+                cv2.line(frame, tuple(pts[i]), tuple(pts[i+1]), color, thickness)
         
         return frame
     

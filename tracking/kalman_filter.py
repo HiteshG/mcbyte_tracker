@@ -6,6 +6,7 @@ Uses constant velocity model with state [x, y, w, h, vx, vy, vw, vh].
 """
 
 import numpy as np
+import scipy.linalg
 from typing import Optional, Tuple
 
 
@@ -149,29 +150,41 @@ class KalmanFilter:
         Run Kalman filter update step.
         
         Args:
-            mean: Predicted state mean
-            covariance: Predicted state covariance
-            measurement: [x, y, w, h] measured bounding box
+            mean: Predicted state mean (8,)
+            covariance: Predicted state covariance (8, 8)
+            measurement: [x, y, w, h] measured bounding box (4,)
             
         Returns:
             Tuple of (updated_mean, updated_covariance)
         """
         projected_mean, projected_cov = self.project(mean, covariance)
         
-        # Kalman gain
-        chol_factor = np.linalg.cholesky(projected_cov)
-        kalman_gain = np.linalg.solve(
-            chol_factor,
-            np.linalg.solve(
-                chol_factor,
-                np.dot(covariance, self._update_mat.T).T
-            ).T
+        # Kalman gain: K = P * H' * S^(-1)
+        # Where S = projected_cov (4x4), P = covariance (8x8), H = _update_mat (4x8)
+        # P * H' is (8x4), we solve S * X = (P * H')' to get X, then K = X'
+        
+        # Cholesky factorization of S (4x4)
+        chol_factor, lower = scipy.linalg.cho_factor(
+            projected_cov, lower=True, check_finite=False
+        )
+        
+        # P * H' is (8, 4), transpose to (4, 8)
+        P_HT = np.dot(covariance, self._update_mat.T)
+        
+        # Solve S * X = (P * H')' for X (4, 8), then K = X' (8, 4)
+        kalman_gain = scipy.linalg.cho_solve(
+            (chol_factor, lower),
+            P_HT.T,
+            check_finite=False
         ).T
         
-        # Innovation
+        # Innovation (measurement residual)
         innovation = measurement - projected_mean
         
-        new_mean = mean + np.dot(innovation, kalman_gain.T)
+        # Update state: x = x + K * innovation
+        new_mean = mean + np.dot(kalman_gain, innovation)
+        
+        # Update covariance: P = P - K * S * K'
         new_covariance = covariance - np.linalg.multi_dot([
             kalman_gain, projected_cov, kalman_gain.T
         ])
@@ -206,7 +219,9 @@ class KalmanFilter:
         
         chol = np.linalg.cholesky(projected_cov)
         d = measurements - projected_mean
-        z = np.linalg.solve(chol, d.T).T
+        z = scipy.linalg.solve_triangular(
+            chol, d.T, lower=True, check_finite=False
+        ).T
         
         return np.sum(z * z, axis=1)
 
