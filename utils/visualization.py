@@ -397,6 +397,37 @@ def create_info_panel(
     return panel
 
 
+def draw_tracks_on_frame(
+    frame: np.ndarray,
+    tracks: List,
+    class_colors: Optional[Dict[int, Tuple[int, int, int]]] = None,
+    class_names: Optional[Dict[int, str]] = None,
+    show_id: bool = True,
+    show_trajectory: bool = True
+) -> np.ndarray:
+    """
+    Simple function to draw tracks on frame.
+    
+    Args:
+        frame: Input frame (BGR)
+        tracks: List of track objects with tlbr, track_id, class_id attributes
+        class_colors: Colors per class
+        class_names: Names per class
+        show_id: Whether to show track IDs
+        show_trajectory: Whether to show trajectories
+        
+    Returns:
+        Annotated frame
+    """
+    vis = Visualizer(
+        class_colors=class_colors or HOCKEY_CLASS_COLORS,
+        class_names=class_names,
+        show_ids=show_id,
+        show_trajectories=show_trajectory
+    )
+    return vis.draw_tracks(frame, tracks)
+
+
 def save_tracking_video(
     frames: List[np.ndarray],
     output_path: str,
